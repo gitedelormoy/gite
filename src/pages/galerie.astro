@@ -1,29 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import GalerieGrid from '../components/GalerieGrid.jsx';
-
-const images = [
-  {
-    src: "https://www.gitedelormoy.fr/wp-content/uploads/2023/08/Gîte-de-lOrmoy-Photos-2023-Le-Gîte-de-lOrmoy-6.jpg",
-    alt: "Extérieur du gîte",
-  },
-  {
-    src: "https://www.gitedelormoy.fr/wp-content/uploads/2023/08/Gîte-de-lOrmoy-Photos-2023-Le-Gîte-de-lOrmoy-12.jpg",
-    alt: "Chambre principale",
-  },
-  {
-    src: "https://www.gitedelormoy.fr/wp-content/uploads/2015/02/Gîte-de-lOrmoy-Photos-2023-Le-Gîte-de-lOrmoy-15.jpg",
-    alt: "Vue sur le domaine",
-  },
-  {
-    src: "https://www.gitedelormoy.fr/wp-content/uploads/2015/02/Gîte-de-lOrmoy-Photos-2023-Le-Gîte-de-lOrmoy-20.jpg",
-    alt: "Détails historiques",
-  },
-  {
-    src: "https://www.gitedelormoy.fr/wp-content/uploads/2023/08/Gîte-de-lOrmoy-Photos-2023-Le-Gîte-de-lOrmoy-8.jpg",
-    alt: "Salon et véranda",
-  },
-];
 ---
 
 <BaseLayout
@@ -34,7 +11,7 @@ const images = [
   <section class="relative h-[55vh] overflow-hidden">
     <div
       class="absolute inset-0 bg-cover bg-center"
-      style="background-image: url(https://www.gitedelormoy.fr/wp-content/uploads/2023/08/Gîte-de-lOrmoy-Photos-2023-Le-Gîte-de-lOrmoy-6.jpg)"
+      style="background-image: url(https://res.cloudinary.com/dpgmwola2/image/upload/q_auto/f_auto/v1775496846/Extrtiot_gjxge4.png)"
     >
       <div class="hero-overlay"></div>
     </div>
@@ -42,20 +19,31 @@ const images = [
       <div>
         <p class="section-label text-white/70 mb-3">Photos</p>
         <h1 class="font-heading text-6xl md:text-8xl font-light text-white">Galerie</h1>
+        <p class="font-body text-white/60 text-sm mt-4 tracking-widest uppercase">17 photos</p>
       </div>
     </div>
   </section>
 
-  <!-- Grid with lightbox (React island) -->
-  <section class="py-20 md:py-28 px-6">
-    <div class="max-w-6xl mx-auto">
-      <GalerieGrid images={images} client:load />
-    </div>
+  <!-- Intro -->
+  <section class="py-14 px-6 text-center max-w-2xl mx-auto">
+    <p class="font-heading text-xl font-light text-muted-foreground italic">
+      Chaque espace a été pensé pour allier authenticité et confort moderne.
+    </p>
+  </section>
+
+  <!-- Gallery -->
+  <section class="pb-20 px-4 md:px-8 lg:px-12">
+    <GalerieGrid client:load />
   </section>
 
   <!-- CTA -->
-  <section class="py-16 px-6 bg-muted/50 text-center">
-    <p class="font-body text-muted-foreground mb-6 text-sm">Vous souhaitez séjourner dans ce cadre ?</p>
-    <a href="/contact" class="btn-primary">Demander une réservation</a>
+  <section class="py-16 px-6 bg-primary text-primary-foreground text-center">
+    <h2 class="font-heading text-3xl md:text-4xl font-light mb-4">Envie de vivre cette expérience ?</h2>
+    <p class="font-body text-primary-foreground/75 mb-8 text-sm max-w-md mx-auto">
+      Réservez votre séjour et profitez de ce cadre d'exception en Sologne.
+    </p>
+    <a href="/contact" class="inline-block px-8 py-3.5 bg-primary-foreground text-primary rounded-full font-body font-medium text-sm hover:bg-primary-foreground/90 transition-all duration-300">
+      Demander une réservation
+    </a>
   </section>
 </BaseLayout>
