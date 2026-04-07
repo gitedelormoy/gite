@@ -1,29 +1,30 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Send, CheckCircle, Calculator, Loader } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Send, CheckCircle, Calculator } from 'lucide-react';
 
 const FORMSPREE_ID = 'xdapyjbz';
 
-// ─── iCal parser ──────────────────────────────────────────────────────────────
-function parseICS(text) {
-  const events = [];
-  const blocks = text.split('BEGIN:VEVENT');
-  for (let i = 1; i < blocks.length; i++) {
-    const block = blocks[i];
-    const summary = (block.match(/SUMMARY[^:]*:(.+)/) || [])[1]?.trim() || '';
-    const dtstart = (block.match(/DTSTART[^:]*:(\d{8})/) || [])[1];
-    const dtend   = (block.match(/DTEND[^:]*:(\d{8})/) || [])[1];
-    if (!dtstart || !dtend) continue;
-    const toDate = s => new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`);
-    events.push({ summary: summary.toLowerCase(), start: toDate(dtstart), end: toDate(dtend) });
-  }
-  return events;
-}
+// ─── Vacances scolaires Zone B + C (Toussaint, Hiver, Printemps) ─────────────
+// Source officielle : data.education.gouv.fr — mis à jour jusqu'en 2027-2028
+const VACANCES_MOYENNES = [
+  // 2024-2025
+  { start: '2024-10-19', end: '2024-11-04' },
+  { start: '2025-02-08', end: '2025-02-24' },
+  { start: '2025-04-05', end: '2025-04-22' },
+  // 2025-2026
+  { start: '2025-10-18', end: '2025-11-03' },
+  { start: '2026-02-14', end: '2026-03-02' },
+  { start: '2026-04-04', end: '2026-04-20' },
+  // 2026-2027
+  { start: '2026-10-17', end: '2026-11-02' },
+  { start: '2027-02-13', end: '2027-03-01' },
+  { start: '2027-04-10', end: '2027-04-26' },
+  // 2027-2028
+  { start: '2027-10-23', end: '2027-11-08' },
+  { start: '2028-02-19', end: '2028-03-04' },
+  { start: '2028-04-08', end: '2028-04-24' },
+];
 
-function isMoyenne(summary) {
-  return summary.includes('toussaint') || summary.includes('hiver') || summary.includes('printemps');
-}
-
-// ─── Saisons ─────────────────────────────────────────────────────────────────
+// ─── Haute saison : été (01/07→31/08) + Noël (20/12→05/01) ──────────────────
 function isHauteSaison(date) {
   const m = date.getMonth() + 1;
   const d = date.getDate();
@@ -31,6 +32,13 @@ function isHauteSaison(date) {
   if (m === 12 && d >= 20) return true;
   if (m === 1 && d <= 5) return true;
   return false;
+}
+
+function getSaison(date) {
+  if (isHauteSaison(date)) return 'haute';
+  const iso = date.toISOString().slice(0, 10);
+  if (VACANCES_MOYENNES.some(v => iso >= v.start && iso < v.end)) return 'moyenne';
+  return 'basse';
 }
 
 // ─── Tarifs ───────────────────────────────────────────────────────────────────
@@ -41,7 +49,7 @@ const TARIFS = {
     3: { basse: 480, moyenne: 530, haute: 580 },
     4: { basse: 560, moyenne: 620, haute: 680 },
     5: { basse: 630, moyenne: 700, haute: 770 },
-    6: { basse: 690, moyenne: 770, haute: 850 },
+    6: { basse: 690, moyenne: 770, haute: 930 }, // haute = tarif semaine fixe
   },
 };
 
@@ -52,13 +60,11 @@ const SAISON_COLOR = { basse: 'text-blue-600', moyenne: 'text-amber-600', haute:
 function toInputDate(date) {
   return date.toISOString().slice(0, 10);
 }
-
 function addDays(dateStr, n) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + n);
   return toInputDate(d);
 }
-
 function today() {
   return toInputDate(new Date());
 }
@@ -70,127 +76,50 @@ export default function ContactForm() {
     arrival: '', departure: '', guests: '', message: '',
   });
   const [status, setStatus] = useState('idle');
-  const [vacances, setVacances] = useState(null);
-  const [vacancesError, setVacancesError] = useState(false);
 
-  // Charger Zone B + Zone C et fusionner
-  useEffect(() => {
-    // Essai avec plusieurs proxies CORS en cascade
-    const PROXIES = [
-      'https://corsproxy.io/?',
-      'https://api.allorigins.win/raw?url=',
-      'https://cors-anywhere.herokuapp.com/',
-    ];
-    const urls = [
-      'https://fr.ftp.opendatasoft.com/openscol/fr-en-calendrier-scolaire/Zone-B.ics',
-      'https://fr.ftp.opendatasoft.com/openscol/fr-en-calendrier-scolaire/Zone-C.ics',
-    ];
-
-    const fetchWithFallback = async (url) => {
-      for (const proxy of PROXIES) {
-        try {
-          const res = await fetch(proxy + encodeURIComponent(url));
-          if (res.ok) return res.text();
-        } catch {}
-      }
-      throw new Error('All proxies failed');
-    };
-
-    Promise.all(urls.map(u => fetchWithFallback(u)))
-      .then(([icsB, icsC]) => {
-        const eventsB = parseICS(icsB).filter(e => isMoyenne(e.summary));
-        const eventsC = parseICS(icsC).filter(e => isMoyenne(e.summary));
-        // Union : garder toutes les périodes uniques
-        const all = [...eventsB];
-        eventsC.forEach(ec => {
-          const exists = eventsB.some(eb =>
-            eb.start.getTime() === ec.start.getTime() && eb.end.getTime() === ec.end.getTime()
-          );
-          if (!exists) all.push(ec);
-        });
-        setVacances(all);
-      })
-      .catch(() => {
-        setVacancesError(true);
-        setVacances([]);
-      });
-  }, []);
-
-  const getSaison = (date) => {
-    if (isHauteSaison(date)) return 'haute';
-    if (vacances?.some(v => date >= v.start && date < v.end)) return 'moyenne';
-    return 'basse';
-  };
-
-  // ── Contraintes sur les dates ─────────────────────────────────────────────
-  // Date d'arrivée : pas avant aujourd'hui
+  // Contraintes dates
   const minArrival = today();
-
-  // Date de départ min selon haute saison ou non
   const minDeparture = useMemo(() => {
     if (!form.arrival) return today();
-    const arrivalDate = new Date(form.arrival);
-    if (isHauteSaison(arrivalDate)) {
-      // Haute saison : minimum 6 nuits
-      return addDays(form.arrival, 6);
-    }
-    // Sinon : minimum 1 nuit après l'arrivée
-    return addDays(form.arrival, 1);
+    return isHauteSaison(new Date(form.arrival))
+      ? addDays(form.arrival, 6)
+      : addDays(form.arrival, 1);
   }, [form.arrival]);
-
-  // Si l'arrivée change et que le départ devient invalide → reset le départ
-  const handleArrivalChange = (e) => {
-    const newArrival = e.target.value;
-    const arrivalDate = new Date(newArrival);
-    const minDep = isHauteSaison(arrivalDate)
-      ? addDays(newArrival, 6)
-      : addDays(newArrival, 1);
-
-    // Reset départ si invalide
-    const newDeparture = form.departure && form.departure >= minDep ? form.departure : '';
-    setForm({ ...form, arrival: newArrival, departure: newDeparture });
-  };
 
   const handleChange = (e) => {
     if (e.target.name === 'arrival') {
-      handleArrivalChange(e);
+      const newArrival = e.target.value;
+      const minDep = isHauteSaison(new Date(newArrival))
+        ? addDays(newArrival, 6)
+        : addDays(newArrival, 1);
+      setForm({ ...form, arrival: newArrival, departure: form.departure >= minDep ? form.departure : '' });
     } else {
       setForm({ ...form, [e.target.name]: e.target.value });
     }
   };
 
-  // ── Calcul du prix ────────────────────────────────────────────────────────
-  const prix = useMemo(() => {
-    if (!form.arrival || !form.departure || !form.guests || vacances === null) return null;
+  const hauteSaisonInfo = form.arrival && isHauteSaison(new Date(form.arrival));
+
+  // ── Calcul prix ──────────────────────────────────────────────────────────
+  const prixInfo = useMemo(() => {
+    if (!form.arrival || !form.departure || !form.guests) return null;
     const d1 = new Date(form.arrival);
     const d2 = new Date(form.departure);
     if (d2 <= d1) return null;
     const nuits = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
     if (nuits < 1) return null;
 
-    const saison = getSaison(d1);
-    let base = 0;
+    // Plus de 6 nuits → prix sur demande
+    if (nuits > 6) return { surDemande: true, nuits };
 
-    if (saison === 'haute') {
-      // Haute saison : toujours 930€ (tarif semaine fixe, minimum 6 nuits)
-      base = TARIFS.semaine.haute;
-    } else if (nuits >= 7) {
-      base = TARIFS.semaine[saison];
-    } else if (TARIFS.nuits[nuits]) {
-      base = TARIFS.nuits[nuits][saison];
-    } else if (nuits === 1) {
-      base = Math.round(TARIFS.nuits[2][saison] / 2);
-    } else {
-      return null;
-    }
+    const saison = getSaison(d1);
+    const base = TARIFS.nuits[nuits]?.[saison] ?? null;
+    if (!base) return null;
 
     const nbPersonnes = parseInt(form.guests);
     const taxeSejour = Math.round(nbPersonnes * 0.22 * nuits * 100) / 100;
-    return { base, taxeSejour, total: base + taxeSejour, nuits, saison };
-  }, [form.arrival, form.departure, form.guests, vacances]);
-
-  // Indication haute saison sous le champ départ
-  const hauteSaisonInfo = form.arrival && isHauteSaison(new Date(form.arrival));
+    return { surDemande: false, base, taxeSejour, total: base + taxeSejour, nuits, saison };
+  }, [form.arrival, form.departure, form.guests]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -201,9 +130,11 @@ export default function ContactForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          _subject: `Demande de réservation — ${form.name}${prix ? ` — ~${prix.total.toFixed(0)}€` : ''}`,
-          estimation_prix: prix
-            ? `${prix.total.toFixed(2)}€ (${SAISON_LABEL[prix.saison]}, ${prix.nuits} nuits)`
+          _subject: `Demande de réservation — ${form.name}${prixInfo && !prixInfo.surDemande ? ` — ~${prixInfo.total.toFixed(0)}€` : ''}`,
+          estimation_prix: prixInfo
+            ? prixInfo.surDemande
+              ? `Prix sur demande (${prixInfo.nuits} nuits)`
+              : `${prixInfo.total.toFixed(2)}€ (${SAISON_LABEL[prixInfo.saison]}, ${prixInfo.nuits} nuits)`
             : 'Non calculé',
         }),
       });
@@ -236,18 +167,6 @@ export default function ContactForm() {
   return (
     <form onSubmit={handleSubmit} className="bg-card rounded-2xl p-8 border border-border shadow-sm space-y-5">
 
-      {vacances === null && (
-        <div className="flex items-center gap-2 text-muted-foreground font-body text-xs">
-          <Loader className="w-3 h-3 animate-spin" />
-          Chargement du calendrier scolaire officiel (Zone B & C)…
-        </div>
-      )}
-      {vacancesError && (
-        <p className="font-body text-xs text-amber-600">
-          ⚠️ Calendrier scolaire indisponible — estimation en basse saison par défaut.
-        </p>
-      )}
-
       {/* Nom + Email */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -273,9 +192,7 @@ export default function ContactForm() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label htmlFor="arrival" className="block font-body text-sm font-medium text-foreground mb-1.5">Arrivée *</label>
-          <input id="arrival" name="arrival" type="date" required
-            min={minArrival}
-            value={form.arrival} onChange={handleChange}
+          <input id="arrival" name="arrival" type="date" required min={minArrival} value={form.arrival} onChange={handleChange}
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
           {hauteSaisonInfo && (
             <p className="font-body text-xs text-primary mt-1">☀️ Haute saison — 6 nuits minimum</p>
@@ -283,13 +200,13 @@ export default function ContactForm() {
         </div>
         <div>
           <label htmlFor="departure" className="block font-body text-sm font-medium text-foreground mb-1.5">Départ *</label>
-          <input id="departure" name="departure" type="date" required
-            min={minDeparture}
-            value={form.departure} onChange={handleChange}
+          <input id="departure" name="departure" type="date" required min={minDeparture} value={form.departure} onChange={handleChange}
             disabled={!form.arrival}
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed" />
           {hauteSaisonInfo && form.arrival && (
-            <p className="font-body text-xs text-muted-foreground mt-1">Au plus tôt le {new Date(minDeparture).toLocaleDateString('fr-FR')}</p>
+            <p className="font-body text-xs text-muted-foreground mt-1">
+              Au plus tôt le {new Date(minDeparture).toLocaleDateString('fr-FR')}
+            </p>
           )}
         </div>
         <div>
@@ -302,37 +219,51 @@ export default function ContactForm() {
         </div>
       </div>
 
-      {/* Prix estimé */}
-      {prix && (
-        <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <Calculator className="w-4 h-4 text-primary" />
-            <span className="font-body text-sm font-medium text-foreground">Estimation du prix</span>
-            <span className={`font-body text-xs px-2 py-0.5 rounded-full bg-primary/10 ${SAISON_COLOR[prix.saison]}`}>
-              {SAISON_LABEL[prix.saison]}
-            </span>
+      {/* Bloc prix */}
+      {prixInfo && (
+        prixInfo.surDemande ? (
+          <div className="rounded-xl bg-muted/50 border border-border p-4 flex items-center gap-3">
+            <Calculator className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="font-body text-sm font-medium text-foreground">
+                {prixInfo.nuits} nuits — Prix sur demande
+              </p>
+              <p className="font-body text-xs text-muted-foreground mt-0.5">
+                Pour les séjours de plus de 6 nuits, nous vous enverrons un tarif personnalisé.
+              </p>
+            </div>
           </div>
-          <div className="flex justify-between font-body text-sm text-muted-foreground">
-            <span>{prix.nuits} nuit{prix.nuits > 1 ? 's' : ''}</span>
-            <span>{prix.base}€</span>
+        ) : (
+          <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Calculator className="w-4 h-4 text-primary" />
+              <span className="font-body text-sm font-medium text-foreground">Estimation du prix</span>
+              <span className={`font-body text-xs px-2 py-0.5 rounded-full bg-primary/10 ${SAISON_COLOR[prixInfo.saison]}`}>
+                {SAISON_LABEL[prixInfo.saison]}
+              </span>
+            </div>
+            <div className="flex justify-between font-body text-sm text-muted-foreground">
+              <span>{prixInfo.nuits} nuit{prixInfo.nuits > 1 ? 's' : ''}</span>
+              <span>{prixInfo.base}€</span>
+            </div>
+            <div className="flex justify-between font-body text-sm text-muted-foreground">
+              <span>Taxe de séjour ({form.guests} pers. × {prixInfo.nuits} nuits × 0,22€)</span>
+              <span>{prixInfo.taxeSejour.toFixed(2)}€</span>
+            </div>
+            <div className="flex justify-between font-body text-sm font-semibold text-foreground border-t border-primary/20 pt-2">
+              <span>Total estimé</span>
+              <span className="text-primary">{prixInfo.total.toFixed(2)}€</span>
+            </div>
+            <p className="font-body text-xs text-muted-foreground">* Estimation indicative, tarif définitif confirmé par email.</p>
           </div>
-          <div className="flex justify-between font-body text-sm text-muted-foreground">
-            <span>Taxe de séjour ({form.guests} pers. × {prix.nuits} nuits × 0,22€)</span>
-            <span>{prix.taxeSejour.toFixed(2)}€</span>
-          </div>
-          <div className="flex justify-between font-body text-sm font-semibold text-foreground border-t border-primary/20 pt-2">
-            <span>Total estimé</span>
-            <span className="text-primary">{prix.total.toFixed(2)}€</span>
-          </div>
-          <p className="font-body text-xs text-muted-foreground">* Estimation indicative, tarif définitif confirmé par email.</p>
-        </div>
+        )
       )}
 
       {/* Message */}
       <div>
         <label htmlFor="message" className="block font-body text-sm font-medium text-foreground mb-1.5">Message</label>
         <textarea id="message" name="message" value={form.message} onChange={handleChange}
-          placeholder="Questions, demandes particulières, animaux de compagnie..." rows={3}
+          placeholder="Questions ou demandes particulières…" rows={3}
           className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors resize-none" />
       </div>
 
@@ -351,7 +282,9 @@ export default function ContactForm() {
           <>
             <Send className="w-4 h-4" />
             Envoyer la demande
-            {prix && <span className="ml-1 opacity-90">({prix.total.toFixed(2)}€ estimé)</span>}
+            {prixInfo && !prixInfo.surDemande && (
+              <span className="ml-1 opacity-90">({prixInfo.total.toFixed(2)}€ estimé)</span>
+            )}
           </>
         )}
       </button>
