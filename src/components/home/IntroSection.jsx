@@ -9,27 +9,29 @@ export default function IntroSection() {
           Un cocon de charme<br />au cœur de la France
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed text-lg max-w-2xl mx-auto mb-6">
-          Découvrez la tranquillité à seulement cinquante mètres du village pittoresque de Saint Laurent.
-          Suivez une petite route de campagne et empruntez l'allée majestueuse de marronniers menant au château.
+          Découvrez la tranquillité à seulement cinquante mètres du village pittoresque
+          de Saint Laurent. Suivez une petite route de campagne et empruntez l'allée
+          majestueuse de marronniers menant au château.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-          La Maison de Gardien du Château de L'Ormoy est un joyau préservé, témoignant de l'histoire
-          à travers les âges. Grâce à une restauration minutieuse, cette demeure est désormais un havre
-          où chacun peut savourer une qualité de vie exceptionnelle.
+          La Maison de Gardien du Château de L'Ormoy est un joyau préservé, témoignant de
+          l'histoire à travers les âges. Grâce à une restauration minutieuse, cette demeure est
+          désormais un havre où chacun peut savourer une qualité de vie exceptionnelle.
         </p>
 
         <div className="grid grid-cols-3 gap-8 mt-16 max-w-2xl mx-auto">
-          {[
-            { value: '6', label: 'Couchages' },
-            { value: '3', label: 'Chambres' },
-           { value: '4 ★', label: 'Meublé tourisme' },
-          ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <p className="font-heading text-5xl font-light text-primary leading-none">
-                {stat.value === '4★' ? <>4<span className="text-2xl">★</span></> : stat.value}</p>
-              <p className="font-body text-sm text-muted-foreground mt-1">{stat.label}</p>
-            </div>
-          ))}
+          <div className="text-center">
+            <p className="font-heading text-5xl font-light text-primary">6</p>
+            <p className="font-body text-sm text-muted-foreground mt-1">Couchages</p>
+          </div>
+          <div className="text-center">
+            <p className="font-heading text-5xl font-light text-primary">3</p>
+            <p className="font-body text-sm text-muted-foreground mt-1">Chambres</p>
+          </div>
+          <div className="text-center">
+            <p className="font-heading text-5xl font-light text-primary">4<span style={{fontSize: '1.5rem', verticalAlign: 'middle', marginLeft: '2px'}}>★</span></p>
+            <p className="font-body text-sm text-muted-foreground mt-1">Meublé tourisme</p>
+          </div>
         </div>
       </div>
     </section>
