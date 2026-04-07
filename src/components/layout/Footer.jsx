@@ -9,7 +9,6 @@ const navLinks = [
   { label: 'Tarifs', path: '/tarifs' },
   { label: 'Blog', path: '/blog' },
   { label: 'Réserver', path: '/reserver' },
-  { label: 'Réserver', path: '/reserver' },
 ];
 
 export default function Footer() {
@@ -17,13 +16,19 @@ export default function Footer() {
     <footer className="bg-primary text-primary-foreground">
       <div className="max-w-7xl mx-auto px-6 py-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-          {/* Brand */}
+
+          {/* Brand + Plaque */}
           <div>
-            <h3 className="font-heading text-3xl font-semibold mb-4">Gîte de l'Ormoy</h3>
+            <h3 className="font-heading text-3xl font-semibold mb-4"> Le Gîte de l'Ormoy</h3>
             <p className="font-body text-sm leading-relaxed opacity-80">
               Meublé de tourisme 4 étoiles au cœur de la Sologne & du Berry.
               Un havre de paix où le charme champêtre rencontre le confort moderne.
             </p>
+            <img
+              src="https://res.cloudinary.com/dpgmwola2/image/upload/q_auto/f_auto/v1775572279/Plaque-Meuble_tourisme4_2023_ig6d7e.png"
+              alt="Meublé de tourisme 4 étoiles — Atout France"
+              className="h-28 w-auto object-contain mt-6"
+            />
           </div>
 
           {/* Navigation */}
@@ -81,15 +86,11 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-primary-foreground/20 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="font-body text-xs opacity-60">
-            © {new Date().getFullYear()} Gîte de l'Ormoy. Tous droits réservés.
+        {/* Bottom bar */}
+        <div className="mt-12 pt-8 border-t border-primary-foreground/20">
+          <p className="font-body text-xs opacity-60 text-center">
+            © {new Date().getFullYear()} Le Gîte de l'Ormoyr. Tous droits réservés.
           </p>
-          <img
-            src="https://www.gitedelormoy.fr/wp-content/uploads/2023/12/Plaque-Meuble_tourisme4_2023.png"
-            alt="Meublé de tourisme 4 étoiles"
-            className="h-14 object-contain opacity-90"
-          />
         </div>
       </div>
     </footer>
