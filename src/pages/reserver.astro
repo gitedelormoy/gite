@@ -39,35 +39,39 @@ import ContactForm from '../components/ContactForm.jsx';
           </p>
         </div>
 
-        <!-- Placeholder calendrier — à remplacer par widget Lodgify / Smoobu / iCal -->
-        <div class="max-w-3xl mx-auto bg-card rounded-2xl border border-border p-8 text-center">
-          <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-primary"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-          </div>
-          <h3 class="font-heading text-2xl font-light text-foreground mb-3">
-            Calendrier des disponibilités
-          </h3>
-          <p class="font-body text-muted-foreground text-sm leading-relaxed mb-6 max-w-sm mx-auto">
-            Le calendrier synchronisé avec Booking et Airbnb sera intégré ici.<br />
-            En attendant, contactez-nous directement via le formulaire ci-dessous.
-          </p>
-          <div class="grid grid-cols-3 gap-3 text-xs font-body max-w-xs mx-auto">
-            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-primary inline-block"></span> Disponible</div>
-            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-muted border border-border inline-block"></span> Réservé</div>
-            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-accent inline-block"></span> Sélectionné</div>
+        <!-- Google Calendar embed -->
+        <div class="max-w-4xl mx-auto">
+          <!-- Légende -->
+          <div class="flex flex-wrap items-center gap-5 mb-5 justify-center font-body text-xs text-muted-foreground">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-sm bg-primary inline-block opacity-80"></span>
+              Réservé
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-sm bg-muted border border-border inline-block"></span>
+              Disponible
+            </div>
+            <p class="text-muted-foreground/70 italic">Mis à jour en temps réel depuis Airbnb & Booking</p>
           </div>
 
-          <!-- Note d'intégration (invisible sur le site, juste pour toi) -->
-          <!-- 
-            INTÉGRATION CALENDRIER :
-            Option 1 — Smoobu (payant, synchronise Airbnb + Booking automatiquement)
-              → smoobu.com → Widget de disponibilités → coller le code iframe ici
-            Option 2 — iCal simple (gratuit)
-              → Récupérer les liens iCal depuis Airbnb et Booking
-              → Intégrer avec un widget comme cal.com ou similar
-            Option 3 — Lodgify / Hostaway
-              → Solutions tout-en-un avec widget calendrier
-          -->
+          <!-- Iframe Google Calendar -->
+          <div class="rounded-2xl overflow-hidden border border-border shadow-sm">
+            <iframe
+              src="https://calendar.google.com/calendar/embed?src=25b3de2e74ffffd444d1f2ab180d0a594ec8d7d404dd153a331a7d493570c424%40group.calendar.google.com&ctz=Europe%2FParis&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&bgcolor=%23f5f0e8&color=%232d5a3d"
+              style="border:0"
+              width="100%"
+              height="500"
+              frameborder="0"
+              scrolling="no"
+              title="Calendrier des disponibilités — Gîte de l'Ormoy"
+              loading="lazy"
+            ></iframe>
+          </div>
+
+          <!-- Note synchro -->
+          <p class="font-body text-xs text-muted-foreground text-center mt-3">
+            📅 Ce calendrier est synchronisé avec Airbnb et Booking.com — les dates réservées apparaissent automatiquement.
+          </p>
         </div>
       </div>
 
@@ -99,7 +103,7 @@ import ContactForm from '../components/ContactForm.jsx';
               <div>
                 <p class="font-body font-medium text-foreground text-sm">Adresse</p>
                 <p class="font-body text-muted-foreground text-sm mt-1">
-                  1 Route de Mehun 18330, Saint Laurent<br />France
+                  Château de l'Ormoy, Saint Laurent<br />près de Vierzon, Centre-Val de Loire
                 </p>
               </div>
             </div>
