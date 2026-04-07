@@ -44,7 +44,7 @@ export default function Navbar() {
               scrolled ? 'text-primary' : 'text-white'
             }`}
           >
-            Gîte de l'Ormoy
+            Le Gîte de l'Ormoy
           </span>
         </a>
 
