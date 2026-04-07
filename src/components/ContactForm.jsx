@@ -3,7 +3,7 @@ import { Send, CheckCircle, Calculator, Loader } from 'lucide-react';
 
 const FORMSPREE_ID = 'xdapyjbz';
 
-// ─── Parsing iCal ─────────────────────────────────────────────────────────────
+// ─── iCal parser ──────────────────────────────────────────────────────────────
 function parseICS(text) {
   const events = [];
   const blocks = text.split('BEGIN:VEVENT');
@@ -14,18 +14,16 @@ function parseICS(text) {
     const dtend   = (block.match(/DTEND[^:]*:(\d{8})/) || [])[1];
     if (!dtstart || !dtend) continue;
     const toDate = s => new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`);
-    events.push({ summary, start: toDate(dtstart), end: toDate(dtend) });
+    events.push({ summary: summary.toLowerCase(), start: toDate(dtstart), end: toDate(dtend) });
   }
   return events;
 }
 
-// Filtrer : garder uniquement Toussaint, Hiver, Printemps (pas Été ni Noël)
-function isMoyenneSaisonVacance(summary) {
-  const s = summary.toLowerCase();
-  return s.includes('toussaint') || s.includes('hiver') || s.includes('printemps');
+function isMoyenne(summary) {
+  return summary.includes('toussaint') || summary.includes('hiver') || summary.includes('printemps');
 }
 
-// ─── Haute saison : été + Noël ─────────────────────────────────────────────
+// ─── Saisons ─────────────────────────────────────────────────────────────────
 function isHauteSaison(date) {
   const m = date.getMonth() + 1;
   const d = date.getDate();
@@ -35,7 +33,7 @@ function isHauteSaison(date) {
   return false;
 }
 
-// ─── Tarifs ────────────────────────────────────────────────────────────────
+// ─── Tarifs ───────────────────────────────────────────────────────────────────
 const TARIFS = {
   semaine: { basse: 740, moyenne: 840, haute: 930 },
   nuits: {
@@ -50,42 +48,102 @@ const TARIFS = {
 const SAISON_LABEL = { basse: 'Basse saison', moyenne: 'Moyenne saison', haute: 'Haute saison' };
 const SAISON_COLOR = { basse: 'text-blue-600', moyenne: 'text-amber-600', haute: 'text-primary' };
 
-// ─── Composant ─────────────────────────────────────────────────────────────
+// ─── Helpers dates ────────────────────────────────────────────────────────────
+function toInputDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + n);
+  return toInputDate(d);
+}
+
+function today() {
+  return toInputDate(new Date());
+}
+
+// ─── Composant ────────────────────────────────────────────────────────────────
 export default function ContactForm() {
   const [form, setForm] = useState({
     name: '', email: '', phone: '',
     arrival: '', departure: '', guests: '', message: '',
   });
   const [status, setStatus] = useState('idle');
-  const [vacances, setVacances] = useState(null); // null = chargement, [] = erreur/vide
+  const [vacances, setVacances] = useState(null);
   const [vacancesError, setVacancesError] = useState(false);
 
-  // Charger le calendrier Zone B au montage
+  // Charger Zone B + Zone C et fusionner
   useEffect(() => {
     const PROXY = 'https://api.allorigins.win/raw?url=';
-    const ICS_URL = encodeURIComponent('https://fr.ftp.opendatasoft.com/openscol/fr-en-calendrier-scolaire/Zone-B.ics');
-    fetch(PROXY + ICS_URL)
-      .then(r => r.text())
-      .then(text => {
-        const all = parseICS(text);
-        const moyennes = all.filter(e => isMoyenneSaisonVacance(e.summary));
-        setVacances(moyennes);
+    const urls = [
+      'https://fr.ftp.opendatasoft.com/openscol/fr-en-calendrier-scolaire/Zone-B.ics',
+      'https://fr.ftp.opendatasoft.com/openscol/fr-en-calendrier-scolaire/Zone-C.ics',
+    ];
+    Promise.all(urls.map(u => fetch(PROXY + encodeURIComponent(u)).then(r => r.text())))
+      .then(([icsB, icsC]) => {
+        const eventsB = parseICS(icsB).filter(e => isMoyenne(e.summary));
+        const eventsC = parseICS(icsC).filter(e => isMoyenne(e.summary));
+        // Union : garder toutes les périodes uniques
+        const all = [...eventsB];
+        eventsC.forEach(ec => {
+          const exists = eventsB.some(eb =>
+            eb.start.getTime() === ec.start.getTime() && eb.end.getTime() === ec.end.getTime()
+          );
+          if (!exists) all.push(ec);
+        });
+        setVacances(all);
       })
       .catch(() => {
         setVacancesError(true);
-        setVacances([]); // fallback : tableau vide
+        setVacances([]);
       });
   }, []);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-
-  // Déterminer la saison d'une date donnée
   const getSaison = (date) => {
     if (isHauteSaison(date)) return 'haute';
-    if (vacances && vacances.some(v => date >= v.start && date < v.end)) return 'moyenne';
+    if (vacances?.some(v => date >= v.start && date < v.end)) return 'moyenne';
     return 'basse';
   };
 
+  // ── Contraintes sur les dates ─────────────────────────────────────────────
+  // Date d'arrivée : pas avant aujourd'hui
+  const minArrival = today();
+
+  // Date de départ min selon haute saison ou non
+  const minDeparture = useMemo(() => {
+    if (!form.arrival) return today();
+    const arrivalDate = new Date(form.arrival);
+    if (isHauteSaison(arrivalDate)) {
+      // Haute saison : minimum 6 nuits
+      return addDays(form.arrival, 6);
+    }
+    // Sinon : minimum 1 nuit après l'arrivée
+    return addDays(form.arrival, 1);
+  }, [form.arrival]);
+
+  // Si l'arrivée change et que le départ devient invalide → reset le départ
+  const handleArrivalChange = (e) => {
+    const newArrival = e.target.value;
+    const arrivalDate = new Date(newArrival);
+    const minDep = isHauteSaison(arrivalDate)
+      ? addDays(newArrival, 6)
+      : addDays(newArrival, 1);
+
+    // Reset départ si invalide
+    const newDeparture = form.departure && form.departure >= minDep ? form.departure : '';
+    setForm({ ...form, arrival: newArrival, departure: newDeparture });
+  };
+
+  const handleChange = (e) => {
+    if (e.target.name === 'arrival') {
+      handleArrivalChange(e);
+    } else {
+      setForm({ ...form, [e.target.name]: e.target.value });
+    }
+  };
+
+  // ── Calcul du prix ────────────────────────────────────────────────────────
   const prix = useMemo(() => {
     if (!form.arrival || !form.departure || !form.guests || vacances === null) return null;
     const d1 = new Date(form.arrival);
@@ -109,21 +167,11 @@ export default function ContactForm() {
 
     const nbPersonnes = parseInt(form.guests);
     const taxeSejour = Math.round(nbPersonnes * 0.22 * nuits * 100) / 100;
-    const total = base + taxeSejour;
-    return { base, taxeSejour, total, nuits, saison };
+    return { base, taxeSejour, total: base + taxeSejour, nuits, saison };
   }, [form.arrival, form.departure, form.guests, vacances]);
 
-  const hauteSaisonWarning = useMemo(() => {
-    if (!form.arrival || !form.departure) return null;
-    const d1 = new Date(form.arrival);
-    const d2 = new Date(form.departure);
-    if (d2 <= d1) return null;
-    const nuits = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-    if (isHauteSaison(d1) && nuits < 6) {
-      return `En haute saison, le séjour minimum est de 6 nuits. Vous avez sélectionné ${nuits} nuit${nuits > 1 ? 's' : ''}.`;
-    }
-    return null;
-  }, [form.arrival, form.departure]);
+  // Indication haute saison sous le champ départ
+  const hauteSaisonInfo = form.arrival && isHauteSaison(new Date(form.arrival));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -135,7 +183,9 @@ export default function ContactForm() {
         body: JSON.stringify({
           ...form,
           _subject: `Demande de réservation — ${form.name}${prix ? ` — ~${prix.total.toFixed(0)}€` : ''}`,
-          estimation_prix: prix ? `${prix.total.toFixed(2)}€ (${SAISON_LABEL[prix.saison]}, ${prix.nuits} nuits)` : 'Non calculé',
+          estimation_prix: prix
+            ? `${prix.total.toFixed(2)}€ (${SAISON_LABEL[prix.saison]}, ${prix.nuits} nuits)`
+            : 'Non calculé',
         }),
       });
       if (res.ok) {
@@ -167,16 +217,15 @@ export default function ContactForm() {
   return (
     <form onSubmit={handleSubmit} className="bg-card rounded-2xl p-8 border border-border shadow-sm space-y-5">
 
-      {/* Indicateur chargement calendrier */}
       {vacances === null && (
         <div className="flex items-center gap-2 text-muted-foreground font-body text-xs">
           <Loader className="w-3 h-3 animate-spin" />
-          Chargement du calendrier scolaire officiel…
+          Chargement du calendrier scolaire officiel (Zone B & C)…
         </div>
       )}
       {vacancesError && (
         <p className="font-body text-xs text-amber-600">
-          ⚠️ Calendrier scolaire indisponible — estimation basée sur la basse saison uniquement.
+          ⚠️ Calendrier scolaire indisponible — estimation en basse saison par défaut.
         </p>
       )}
 
@@ -201,17 +250,28 @@ export default function ContactForm() {
           className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
       </div>
 
-      {/* Dates + personnes */}
+      {/* Dates + Personnes */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label htmlFor="arrival" className="block font-body text-sm font-medium text-foreground mb-1.5">Arrivée *</label>
-          <input id="arrival" name="arrival" type="date" required value={form.arrival} onChange={handleChange}
+          <input id="arrival" name="arrival" type="date" required
+            min={minArrival}
+            value={form.arrival} onChange={handleChange}
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
+          {hauteSaisonInfo && (
+            <p className="font-body text-xs text-primary mt-1">☀️ Haute saison — 6 nuits minimum</p>
+          )}
         </div>
         <div>
           <label htmlFor="departure" className="block font-body text-sm font-medium text-foreground mb-1.5">Départ *</label>
-          <input id="departure" name="departure" type="date" required value={form.departure} onChange={handleChange}
-            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
+          <input id="departure" name="departure" type="date" required
+            min={minDeparture}
+            value={form.departure} onChange={handleChange}
+            disabled={!form.arrival}
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed" />
+          {hauteSaisonInfo && form.arrival && (
+            <p className="font-body text-xs text-muted-foreground mt-1">Au plus tôt le {new Date(minDeparture).toLocaleDateString('fr-FR')}</p>
+          )}
         </div>
         <div>
           <label htmlFor="guests" className="block font-body text-sm font-medium text-foreground mb-1.5">Personnes *</label>
@@ -223,20 +283,8 @@ export default function ContactForm() {
         </div>
       </div>
 
-      {/* Avertissement haute saison */}
-      {hauteSaisonWarning && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
-          <span className="text-amber-500 text-lg shrink-0">⚠️</span>
-          <div>
-            <p className="font-body text-sm font-medium text-amber-800">Séjour minimum non respecté</p>
-            <p className="font-body text-sm text-amber-700 mt-0.5">{hauteSaisonWarning}</p>
-            <p className="font-body text-xs text-amber-600 mt-1">Veuillez sélectionner au moins 6 nuits pour un séjour en haute saison.</p>
-          </div>
-        </div>
-      )}
-
       {/* Prix estimé */}
-      {prix && !hauteSaisonWarning && (
+      {prix && (
         <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-2">
           <div className="flex items-center gap-2 mb-1">
             <Calculator className="w-4 h-4 text-primary" />
@@ -273,11 +321,8 @@ export default function ContactForm() {
         <p className="font-body text-sm text-red-500">Une erreur est survenue. Réessayez ou contactez-nous par email.</p>
       )}
 
-      <button
-        type="submit"
-        disabled={status === 'sending' || !!hauteSaisonWarning}
-        className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary text-primary-foreground rounded-full font-body font-medium text-sm hover:bg-primary/90 transition-all duration-300 disabled:opacity-60"
-      >
+      <button type="submit" disabled={status === 'sending'}
+        className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary text-primary-foreground rounded-full font-body font-medium text-sm hover:bg-primary/90 transition-all duration-300 disabled:opacity-60">
         {status === 'sending' ? (
           <>
             <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
@@ -287,9 +332,7 @@ export default function ContactForm() {
           <>
             <Send className="w-4 h-4" />
             Envoyer la demande
-            {prix && !hauteSaisonWarning && (
-              <span className="ml-1 opacity-90">({prix.total.toFixed(2)}€ estimé)</span>
-            )}
+            {prix && <span className="ml-1 opacity-90">({prix.total.toFixed(2)}€ estimé)</span>}
           </>
         )}
       </button>
