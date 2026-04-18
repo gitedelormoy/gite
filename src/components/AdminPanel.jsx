@@ -39,7 +39,7 @@ function parseICS(text) {
 
 const ICAL_SOURCES = [
   { name: 'Airbnb', source: 'airbnb', url: 'https://www.airbnb.fr/calendar/ical/7268032.ics?t=cab18de279ac4a39a295599ff51f4602' },
-  { name: 'Booking', source: 'booking', url: 'https://ical.booking.com/v1/export?t=65fb0d40-ba23-440d-953f-2685a2b18eb0' },
+  { name: 'Booking', source: 'booking', url: 'https://ical.booking.com/v1/export?t=a7dca628-0973-44ed-840a-453ec815e714' },
 ];
 
 const PROXY = 'https://corsproxy.io/?';
