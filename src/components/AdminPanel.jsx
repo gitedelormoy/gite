@@ -17,7 +17,6 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getFirestore(app);
 
-// ── iCal parser ───────────────────────────────────────────────────────────────
 function parseICS(text) {
   const events = [];
   const blocks = text.split('BEGIN:VEVENT');
@@ -28,11 +27,7 @@ function parseICS(text) {
     const dtend   = (block.match(/DTEND[;:][^:\r\n]*:?(\d{8})/) || block.match(/DTEND:(\d{8})/) || [])[1];
     if (!dtstart || !dtend) continue;
     const toDate = s => `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
-    if (summary.toLowerCase().includes('airbnb') || summary.toLowerCase().includes('not available') || summary.toLowerCase().includes('reserved')) {
-      events.push({ label: summary, arrival: toDate(dtstart), departure: toDate(dtend) });
-    } else {
-      events.push({ label: summary, arrival: toDate(dtstart), departure: toDate(dtend) });
-    }
+    events.push({ label: summary, arrival: toDate(dtstart), departure: toDate(dtend) });
   }
   return events;
 }
@@ -58,7 +53,7 @@ const SOURCE_LABELS = {
   blocked: 'Bloqué',
 };
 
-const ADMIN_PASSWORD = 'ormoy2024';
+const ADMIN_PASSWORD_HASH = '3f80bd037075810d8dafe63ecbe6913ea9fcd2652a6c24826201f8c126b82bcf';
 
 export default function AdminPanel() {
   const [authed, setAuthed] = useState(false);
@@ -72,12 +67,17 @@ export default function AdminPanel() {
 
   const [form, setForm] = useState({ label: '', arrival: '', departure: '', source: 'direct', notes: '' });
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState('list'); // list | add | sync
+  const [tab, setTab] = useState('list');
 
-  // Auth
-  const handleLogin = (e) => {
+  // Auth avec hash SHA-256
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    if (hashHex === ADMIN_PASSWORD_HASH) {
       setAuthed(true);
     } else {
       setPwError(true);
@@ -131,7 +131,6 @@ export default function AdminPanel() {
         const events = parseICS(text);
         setSyncLog(prev => prev + ` ${events.length} événements trouvés`);
 
-        // Only add events that don't already exist (check by arrival+source)
         const existing = reservations.filter(r => r.source === source.source).map(r => r.arrival);
         let added = 0;
         for (const ev of events) {
@@ -158,7 +157,6 @@ export default function AdminPanel() {
     setSyncing(false);
   };
 
-  // ── Login screen ─────────────────────────────────────────────────────────
   if (!authed) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
@@ -189,13 +187,11 @@ export default function AdminPanel() {
     );
   }
 
-  // ── Admin panel ───────────────────────────────────────────────────────────
   const upcoming = reservations.filter(r => r.departure >= new Date().toISOString().slice(0,10));
   const past = reservations.filter(r => r.departure < new Date().toISOString().slice(0,10));
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-primary text-primary-foreground px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="font-heading text-2xl font-semibold">Administration</h1>
@@ -214,7 +210,6 @@ export default function AdminPanel() {
         </div>
       </header>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-6 py-6 max-w-5xl mx-auto">
         {[
           { label: 'À venir', value: upcoming.length, color: 'text-primary' },
@@ -229,7 +224,6 @@ export default function AdminPanel() {
         ))}
       </div>
 
-      {/* Tabs */}
       <div className="max-w-5xl mx-auto px-6">
         <div className="flex gap-1 bg-muted rounded-xl p-1 mb-6 w-fit">
           {[
@@ -247,7 +241,6 @@ export default function AdminPanel() {
           ))}
         </div>
 
-        {/* LIST TAB */}
         {tab === 'list' && (
           <div className="space-y-3 pb-12">
             {loading ? (
@@ -276,13 +269,11 @@ export default function AdminPanel() {
                     <button
                       onClick={() => handleDelete(r.id, r.label)}
                       className="w-8 h-8 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 flex items-center justify-center transition-colors shrink-0"
-                      title="Supprimer"
                     >
                       ✕
                     </button>
                   </div>
                 ))}
-
                 {past.length > 0 && (
                   <>
                     <h2 className="font-heading text-xl font-light text-muted-foreground mb-4 mt-8">Passées ({past.length})</h2>
@@ -309,7 +300,6 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* ADD TAB */}
         {tab === 'add' && (
           <div className="max-w-xl pb-12">
             <h2 className="font-heading text-xl font-light text-foreground mb-6">Ajouter une réservation</h2>
@@ -375,7 +365,6 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* SYNC TAB */}
         {tab === 'sync' && (
           <div className="max-w-xl pb-12">
             <h2 className="font-heading text-xl font-light text-foreground mb-2">Synchroniser les calendriers</h2>
@@ -383,7 +372,6 @@ export default function AdminPanel() {
               Importe les réservations depuis Airbnb et Booking directement dans Firebase.
               Les réservations déjà existantes ne seront pas dupliquées.
             </p>
-
             <div className="bg-card rounded-2xl border border-border p-6 space-y-4">
               {ICAL_SOURCES.map(s => (
                 <div key={s.source} className="flex items-center gap-3">
@@ -394,7 +382,6 @@ export default function AdminPanel() {
                   </div>
                 </div>
               ))}
-
               <button
                 onClick={handleSync}
                 disabled={syncing}
@@ -407,14 +394,12 @@ export default function AdminPanel() {
                   </>
                 ) : '🔄 Lancer la synchronisation'}
               </button>
-
               {syncLog && (
                 <pre className="bg-muted rounded-xl p-4 font-body text-xs text-foreground whitespace-pre-wrap mt-4 leading-relaxed">
                   {syncLog}
                 </pre>
               )}
             </div>
-
             <p className="font-body text-xs text-muted-foreground mt-4 text-center">
               💡 Lance cette synchro manuellement après chaque réservation Airbnb ou Booking pour mettre à jour le calendrier sur le site.
             </p>
