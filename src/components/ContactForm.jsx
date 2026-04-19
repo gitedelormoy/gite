@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Send, CheckCircle, Calculator } from 'lucide-react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { DayPicker } from 'react-day-picker';
+import { fr } from 'date-fns/locale';
+import 'react-day-picker/dist/style.css';
 
 const FORMSPREE_ID = 'xdapyjbz';
 
@@ -49,7 +52,6 @@ function getSaison(date) {
 }
 
 const TARIFS = {
-  semaine: { basse: 740, moyenne: 840, haute: 930 },
   nuits: {
     2: { basse: 390, moyenne: 430, haute: 470 },
     3: { basse: 480, moyenne: 530, haute: 580 },
@@ -62,39 +64,35 @@ const TARIFS = {
 const SAISON_LABEL = { basse: 'Basse saison', moyenne: 'Moyenne saison', haute: 'Haute saison' };
 const SAISON_COLOR = { basse: 'text-blue-600', moyenne: 'text-amber-600', haute: 'text-primary' };
 
-function toInputDate(date) {
+function toIso(date) {
   return date.toISOString().slice(0, 10);
 }
-function addDays(dateStr, n) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + n);
-  return toInputDate(d);
-}
-function today() {
-  return toInputDate(new Date());
-}
 
-// Génère toutes les dates entre arrival et departure (exclus)
 function getDatesBetween(arrival, departure) {
   const dates = [];
   const current = new Date(arrival);
   const end = new Date(departure);
   while (current < end) {
-    dates.push(toInputDate(new Date(current)));
+    dates.push(new Date(current));
     current.setDate(current.getDate() + 1);
   }
   return dates;
 }
 
+function formatDate(date) {
+  if (!date) return '';
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export default function ContactForm() {
   const [form, setForm] = useState({
-    name: '', email: '', phone: '',
-    arrival: '', departure: '', guests: '', message: '',
+    name: '', email: '', phone: '', guests: '', message: '',
   });
+  const [range, setRange] = useState({ from: undefined, to: undefined });
   const [status, setStatus] = useState('idle');
   const [bookedDates, setBookedDates] = useState([]);
+  const [showCalendar, setShowCalendar] = useState(false);
 
-  // Charge les dates réservées depuis Firestore
   useEffect(() => {
     async function fetchReservations() {
       const snap = await getDocs(collection(db, 'reservations'));
@@ -105,70 +103,61 @@ export default function ContactForm() {
           dates.push(...getDatesBetween(arrival, departure));
         }
       });
-      setBookedDates([...new Set(dates)]);
+      setBookedDates(dates);
     }
     fetchReservations();
   }, []);
 
-  // Première date disponible
-  const firstAvailable = useMemo(() => {
-    let d = today();
-    while (bookedDates.includes(d)) {
-      d = addDays(d, 1);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const disabledDays = [
+    { before: today },
+    ...bookedDates,
+  ];
+
+  const hauteSaisonInfo = range.from && isHauteSaison(range.from);
+
+  const handleRangeSelect = (selected) => {
+    if (!selected) {
+      setRange({ from: undefined, to: undefined });
+      return;
     }
-    return d;
-  }, [bookedDates]);
-
-  const minArrival = firstAvailable;
-
-  const minDeparture = useMemo(() => {
-    if (!form.arrival) return today();
-    return isHauteSaison(new Date(form.arrival))
-      ? addDays(form.arrival, 6)
-      : addDays(form.arrival, 1);
-  }, [form.arrival]);
-
-  // Prochaine date réservée après l'arrivée (pour bloquer le départ)
-  const maxDeparture = useMemo(() => {
-    if (!form.arrival) return '';
-    const sorted = bookedDates
-      .filter(d => d > form.arrival)
-      .sort();
-    return sorted.length > 0 ? sorted[0] : '';
-  }, [form.arrival, bookedDates]);
-
-  const isDateBooked = (dateStr) => bookedDates.includes(dateStr);
-
-  const handleChange = (e) => {
-    if (e.target.name === 'arrival') {
-      const newArrival = e.target.value;
-      if (isDateBooked(newArrival)) return; // bloque la sélection
-      const minDep = isHauteSaison(new Date(newArrival))
-        ? addDays(newArrival, 6)
-        : addDays(newArrival, 1);
-      setForm({ ...form, arrival: newArrival, departure: form.departure >= minDep ? form.departure : '' });
-    } else {
-      setForm({ ...form, [e.target.name]: e.target.value });
+    // Vérifie qu'aucune date réservée n'est dans la plage
+    if (selected.from && selected.to) {
+      const between = getDatesBetween(selected.from, selected.to);
+      const hasBooked = between.some(d =>
+        bookedDates.some(b => toIso(b) === toIso(d))
+      );
+      if (hasBooked) {
+        setRange({ from: selected.from, to: undefined });
+        return;
+      }
+      // Haute saison : minimum 6 nuits
+      if (isHauteSaison(selected.from)) {
+        const nuits = Math.round((selected.to - selected.from) / (1000 * 60 * 60 * 24));
+        if (nuits < 6) {
+          setRange({ from: selected.from, to: undefined });
+          return;
+        }
+      }
+      setShowCalendar(false);
     }
+    setRange(selected);
   };
 
-  const hauteSaisonInfo = form.arrival && isHauteSaison(new Date(form.arrival));
-
   const prixInfo = useMemo(() => {
-    if (!form.arrival || !form.departure || !form.guests) return null;
-    const d1 = new Date(form.arrival);
-    const d2 = new Date(form.departure);
-    if (d2 <= d1) return null;
-    const nuits = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+    if (!range.from || !range.to || !form.guests) return null;
+    const nuits = Math.round((range.to - range.from) / (1000 * 60 * 60 * 24));
     if (nuits < 1) return null;
     if (nuits > 6) return { surDemande: true, nuits };
-    const saison = getSaison(d1);
+    const saison = getSaison(range.from);
     const base = TARIFS.nuits[nuits]?.[saison] ?? null;
     if (!base) return null;
     const nbPersonnes = parseInt(form.guests);
     const taxeSejour = Math.round(nbPersonnes * 0.22 * nuits * 100) / 100;
     return { surDemande: false, base, taxeSejour, total: base + taxeSejour, nuits, saison };
-  }, [form.arrival, form.departure, form.guests]);
+  }, [range, form.guests]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -179,6 +168,8 @@ export default function ContactForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          arrival: range.from ? toIso(range.from) : '',
+          departure: range.to ? toIso(range.to) : '',
           _subject: `Demande de réservation — ${form.name}${prixInfo && !prixInfo.surDemande ? ` — ~${prixInfo.total.toFixed(0)}€` : ''}`,
           estimation_prix: prixInfo
             ? prixInfo.surDemande
@@ -189,7 +180,8 @@ export default function ContactForm() {
       });
       if (res.ok) {
         setStatus('success');
-        setForm({ name: '', email: '', phone: '', arrival: '', departure: '', guests: '', message: '' });
+        setForm({ name: '', email: '', phone: '', guests: '', message: '' });
+        setRange({ from: undefined, to: undefined });
       } else {
         setStatus('error');
       }
@@ -218,63 +210,86 @@ export default function ContactForm() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="name" className="block font-body text-sm font-medium text-foreground mb-1.5">Nom complet *</label>
-          <input id="name" name="name" type="text" required value={form.name} onChange={handleChange} placeholder="Votre nom"
+          <label className="block font-body text-sm font-medium text-foreground mb-1.5">Nom complet *</label>
+          <input name="name" type="text" required value={form.name}
+            onChange={e => setForm({ ...form, name: e.target.value })}
+            placeholder="Votre nom"
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
         </div>
         <div>
-          <label htmlFor="email" className="block font-body text-sm font-medium text-foreground mb-1.5">Email *</label>
-          <input id="email" name="email" type="email" required value={form.email} onChange={handleChange} placeholder="votre@email.com"
+          <label className="block font-body text-sm font-medium text-foreground mb-1.5">Email *</label>
+          <input name="email" type="email" required value={form.email}
+            onChange={e => setForm({ ...form, email: e.target.value })}
+            placeholder="votre@email.com"
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
         </div>
       </div>
 
       <div>
-        <label htmlFor="phone" className="block font-body text-sm font-medium text-foreground mb-1.5">Téléphone</label>
-        <input id="phone" name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="+33 6 00 00 00 00"
+        <label className="block font-body text-sm font-medium text-foreground mb-1.5">Téléphone</label>
+        <input name="phone" type="tel" value={form.phone}
+          onChange={e => setForm({ ...form, phone: e.target.value })}
+          placeholder="+33 6 00 00 00 00"
           className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <label htmlFor="arrival" className="block font-body text-sm font-medium text-foreground mb-1.5">Arrivée *</label>
-          <input id="arrival" name="arrival" type="date" required
-            min={minArrival}
-            value={form.arrival}
-            onChange={handleChange}
-            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
-          {hauteSaisonInfo && (
-            <p className="font-body text-xs text-primary mt-1">☀️ Haute saison — 6 nuits minimum</p>
-          )}
-        </div>
-        <div>
-          <label htmlFor="departure" className="block font-body text-sm font-medium text-foreground mb-1.5">Départ *</label>
-          <input id="departure" name="departure" type="date" required
-            min={minDeparture}
-            max={maxDeparture || undefined}
-            value={form.departure}
-            onChange={handleChange}
-            disabled={!form.arrival}
-            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed" />
-          {hauteSaisonInfo && form.arrival && (
-            <p className="font-body text-xs text-muted-foreground mt-1">
-              Au plus tôt le {new Date(minDeparture).toLocaleDateString('fr-FR')}
-            </p>
-          )}
-          {maxDeparture && form.arrival && (
-            <p className="font-body text-xs text-muted-foreground mt-1">
-              Au plus tard le {new Date(maxDeparture).toLocaleDateString('fr-FR')}
-            </p>
-          )}
-        </div>
-        <div>
-          <label htmlFor="guests" className="block font-body text-sm font-medium text-foreground mb-1.5">Personnes *</label>
-          <select id="guests" name="guests" required value={form.guests} onChange={handleChange}
-            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors">
-            <option value="">—</option>
-            {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n} personne{n > 1 ? 's' : ''}</option>)}
-          </select>
-        </div>
+      {/* Calendrier */}
+      <div>
+        <label className="block font-body text-sm font-medium text-foreground mb-1.5">Dates de séjour *</label>
+        <button
+          type="button"
+          onClick={() => setShowCalendar(!showCalendar)}
+          className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm text-left focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+        >
+          {range.from && range.to
+            ? `${formatDate(range.from)} → ${formatDate(range.to)}`
+            : range.from
+            ? `${formatDate(range.from)} → choisir le départ`
+            : '📅 Sélectionner vos dates'}
+        </button>
+
+        {hauteSaisonInfo && (
+          <p className="font-body text-xs text-primary mt-1">☀️ Haute saison — 6 nuits minimum</p>
+        )}
+
+        {showCalendar && (
+          <div className="mt-2 border border-border rounded-2xl p-4 bg-card shadow-sm overflow-x-auto">
+            <style>{`
+              .rdp { --rdp-accent-color: hsl(150, 25%, 28%); --rdp-background-color: hsl(150, 25%, 28%, 0.1); margin: 0; }
+              .rdp-day_disabled { opacity: 0.3; text-decoration: line-through; }
+              .rdp-day_selected { background-color: hsl(150, 25%, 28%); color: white; }
+              .rdp-day_range_middle { background-color: hsl(150, 25%, 28%, 0.15); color: hsl(150, 25%, 28%); }
+            `}</style>
+            <DayPicker
+              mode="range"
+              selected={range}
+              onSelect={handleRangeSelect}
+              disabled={disabledDays}
+              locale={fr}
+              numberOfMonths={2}
+              fromDate={today}
+              modifiersClassNames={{
+                disabled: 'rdp-day_disabled',
+              }}
+            />
+            {range.from && !range.to && (
+              <p className="font-body text-xs text-muted-foreground mt-2 text-center">
+                Cliquez sur la date de départ
+                {hauteSaisonInfo ? ` (minimum 6 nuits — au plus tôt le ${formatDate(new Date(range.from.getTime() + 6 * 86400000))})` : ''}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="block font-body text-sm font-medium text-foreground mb-1.5">Personnes *</label>
+        <select required value={form.guests}
+          onChange={e => setForm({ ...form, guests: e.target.value })}
+          className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors">
+          <option value="">—</option>
+          {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n} personne{n > 1 ? 's' : ''}</option>)}
+        </select>
       </div>
 
       {prixInfo && (
@@ -313,8 +328,9 @@ export default function ContactForm() {
       )}
 
       <div>
-        <label htmlFor="message" className="block font-body text-sm font-medium text-foreground mb-1.5">Message</label>
-        <textarea id="message" name="message" value={form.message} onChange={handleChange}
+        <label className="block font-body text-sm font-medium text-foreground mb-1.5">Message</label>
+        <textarea name="message" value={form.message}
+          onChange={e => setForm({ ...form, message: e.target.value })}
           placeholder="Questions ou demandes particulières…" rows={3}
           className="w-full px-4 py-2.5 rounded-xl border border-border bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors resize-none" />
       </div>
@@ -323,7 +339,7 @@ export default function ContactForm() {
         <p className="font-body text-sm text-red-500">Une erreur est survenue. Réessayez ou contactez-nous par email.</p>
       )}
 
-      <button type="submit" disabled={status === 'sending'}
+      <button type="submit" disabled={status === 'sending' || !range.from || !range.to}
         className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary text-primary-foreground rounded-full font-body font-medium text-sm hover:bg-primary/90 transition-all duration-300 disabled:opacity-60">
         {status === 'sending' ? (
           <>
