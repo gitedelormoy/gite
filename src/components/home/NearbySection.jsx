@@ -26,9 +26,12 @@ export default function NearbySection() {
           <div className="rounded-2xl overflow-hidden border border-border shadow-sm h-96">
             <iframe
               title="Localisation Gîte de l'Ormoy"
-              src=https://www.openstreetmap.org/export/embed.html?bbox=2.09%2C47.17%2C2.32%2C47.27&layer=mapnik&marker=47.2211%2C2.2058"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2709.7689113947526!2d2.2031995121903676!3d47.221103771036844!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47fac445a1d35b31%3A0xc91225407655d81f!2sLe%20G%C3%AEte%20de%20l'Ormoy!5e0!3m2!1sfr!2sfr!4v1776966632505!5m2!1sfr!2sfr"
               className="w-full h-full"
+              style={{ border: 0 }}
+              allowFullScreen=""
               loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
             />
           </div>
           {/* Highlights */}
