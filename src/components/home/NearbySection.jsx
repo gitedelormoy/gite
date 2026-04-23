@@ -21,18 +21,16 @@ export default function NearbySection() {
             pour explorer la Sologne, le Berry et bien plus encore.
           </p>
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
           {/* Map embed */}
           <div className="rounded-2xl overflow-hidden border border-border shadow-sm h-96">
             <iframe
               title="Localisation Gîte de l'Ormoy"
-              src="src="https://www.openstreetmap.org/export/embed.html?bbox=1.87%2C47.08%2C2.27%2C47.28&layer=mapnik&marker=47.1689%2C2.0701"
+              src="https://www.openstreetmap.org/export/embed.html?bbox=1.87%2C47.08%2C2.27%2C47.28&layer=mapnik&marker=47.1689%2C2.0701"
               className="w-full h-full"
               loading="lazy"
             />
           </div>
-
           {/* Highlights */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {highlights.map((h) => (
