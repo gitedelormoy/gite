@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wifi, Tv, UtensilsCrossed, Shirt, Bike, Heart, Car, Flame, Trees, Baby, Dog, BookOpen } from 'lucide-react';
+import { Wifi, Tv, UtensilsCrossed, Shirt, Bike, Heart, Car, Flame, AirVent, Baby, Zap, BookOpen } from 'lucide-react';
 
 const services = [
   { icon: Wifi, label: 'WiFi Fibre haut débit' },
@@ -10,9 +10,9 @@ const services = [
   { icon: Heart, label: 'Accueil équestre' },
   { icon: Car, label: 'Parking gratuit' },
   { icon: Flame, label: 'Barbecue' },
-  { icon: Trees, label: 'Jardin clos' },
+  { icon: AirVent, label: 'Climatisation' },
   { icon: Baby, label: 'Équipement bébé' },
-  { icon: Dog, label: 'Animaux bienvenus' },
+  { icon: Zap, label: 'Borne de recharge électrique' },
   { icon: BookOpen, label: 'Guides locaux' },
 ];
 
@@ -24,7 +24,6 @@ export default function ServicesSection() {
           <p className="section-label mb-3">Confort</p>
           <h2 className="font-heading text-4xl md:text-5xl font-light text-foreground">Nos Services</h2>
         </div>
-
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {services.map(({ icon: Icon, label }) => (
             <div
@@ -38,7 +37,6 @@ export default function ServicesSection() {
             </div>
           ))}
         </div>
-
         <div className="text-center mt-10">
           <a href="/services" className="btn-primary">
             Tous les services
